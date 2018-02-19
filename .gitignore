@@ -1,0 +1,8 @@
+# Intellij
+.idea
+out
+target
+TSSpotifyVote.iml
+Credentials.cfg
+SpotifyShare.iml
+Credentials.cfg
