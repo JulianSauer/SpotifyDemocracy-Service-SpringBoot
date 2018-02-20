@@ -26,7 +26,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @RestController
-@CrossOrigin(origins = "http://localhost:4200")
+@CrossOrigin
 public class SpotifyController implements ISpotifyController {
 
     private final String scope = "user-read-playback-state," +
