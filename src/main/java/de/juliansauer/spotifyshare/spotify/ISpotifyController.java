@@ -2,6 +2,7 @@ package de.juliansauer.spotifyshare.spotify;
 
 import com.wrapper.spotify.model_objects.miscellaneous.CurrentlyPlayingContext;
 import de.juliansauer.spotifyshare.rest.AuthorizationCode;
+import de.juliansauer.spotifyshare.rest.Song;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -41,7 +42,7 @@ public interface ISpotifyController {
      * @return Playback information
      */
     @RequestMapping(value = "/currentSong", method = GET)
-    CurrentlyPlayingContext getSongContext(String userId);
+    Song getCurrentSong(String userId);
 
     /**
      * Returns currently used device.

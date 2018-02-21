@@ -7,12 +7,14 @@ import com.wrapper.spotify.exceptions.detailed.UnauthorizedException;
 import com.wrapper.spotify.model_objects.credentials.AuthorizationCodeCredentials;
 import com.wrapper.spotify.model_objects.miscellaneous.CurrentlyPlayingContext;
 import com.wrapper.spotify.model_objects.miscellaneous.Device;
+import com.wrapper.spotify.model_objects.specification.ArtistSimplified;
 import com.wrapper.spotify.model_objects.specification.Track;
 import com.wrapper.spotify.requests.authorization.authorization_code.AuthorizationCodeRefreshRequest;
 import com.wrapper.spotify.requests.authorization.authorization_code.AuthorizationCodeRequest;
 import com.wrapper.spotify.requests.authorization.authorization_code.AuthorizationCodeUriRequest;
 import com.wrapper.spotify.requests.data.player.*;
 import de.juliansauer.spotifyshare.rest.AuthorizationCode;
+import de.juliansauer.spotifyshare.rest.Song;
 import de.juliansauer.spotifyshare.storage.ConfigManager;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -85,8 +87,24 @@ public class SpotifyController implements ISpotifyController {
     }
 
     @Override
-    public CurrentlyPlayingContext getSongContext(String userId) {
-        return getSongContext(userId, true);
+    public Song getCurrentSong(String userId) {
+        CurrentlyPlayingContext context = getSongContext(userId, true);
+        if (context == null)
+            return new Song("", "");
+        Track track = context.getItem();
+        ArtistSimplified[] artists = track.getArtists();
+        StringBuilder songInformation = new StringBuilder();
+
+        for (int i = 0; i < artists.length; i++) {
+            if (i == artists.length - 1) {
+                songInformation.append(artists[i].getName());
+            } else {
+                songInformation.append(artists[i].getName());
+                songInformation.append(", ");
+            }
+        }
+
+        return new Song(track.getName(), songInformation.toString());
     }
 
     @Override
@@ -113,7 +131,7 @@ public class SpotifyController implements ISpotifyController {
 
     @Override
     public int getRemainingMS(@RequestParam String userId) {
-        CurrentlyPlayingContext context = getSongContext(userId);
+        CurrentlyPlayingContext context = getSongContext(userId, true);
         if (context == null || !context.getIs_playing())
             return 20000;
         Track track = context.getItem();
@@ -174,7 +192,7 @@ public class SpotifyController implements ISpotifyController {
 
     private boolean pauseSong(String userId, boolean retry) {
 
-        CurrentlyPlayingContext currentContex = getSongContext(userId);
+        CurrentlyPlayingContext currentContex = getSongContext(userId, true);
         if (!spotifyAccounts.containsKey(userId)
                 || currentContex == null
                 || !currentContex.getIs_playing())
@@ -202,7 +220,7 @@ public class SpotifyController implements ISpotifyController {
 
     private boolean resumeSong(String userId, boolean retry) {
 
-        CurrentlyPlayingContext currentContex = getSongContext(userId);
+        CurrentlyPlayingContext currentContex = getSongContext(userId, true);
         if (!spotifyAccounts.containsKey(userId)
                 || currentContex == null
                 || currentContex.getIs_playing())
