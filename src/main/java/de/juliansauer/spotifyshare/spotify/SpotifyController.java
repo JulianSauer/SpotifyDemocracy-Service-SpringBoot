@@ -16,6 +16,7 @@ import com.wrapper.spotify.requests.data.player.*;
 import de.juliansauer.spotifyshare.rest.AuthorizationCode;
 import de.juliansauer.spotifyshare.rest.Song;
 import de.juliansauer.spotifyshare.storage.ConfigManager;
+import de.juliansauer.spotifyshare.voting.Channel;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -35,60 +36,61 @@ public class SpotifyController implements ISpotifyController {
             "user-modify-playback-state";
 
     private final int UPDATE_DELAY = 2000;
-
-    private Map<String, SpotifyApi> spotifyAccounts;
+    
+    private Map<String, Channel> channels;
 
     private final URI redirectUri = SpotifyHttpManager.makeUri("http://localhost:4200/create");
 
     ConfigManager config;
 
     public SpotifyController() {
-        spotifyAccounts = new HashMap<>();
+        channels = new HashMap<>();
         config = new ConfigManager();
     }
 
     @Override
-    public ResponseEntity addUser(String code, String userId) {
+    public ResponseEntity addUser(String code, String userId, String channelId) {
         SpotifyApi api = getAuthorizationCodeCredentials(code);
         if (api == null)
             return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
-        spotifyAccounts.put(userId, api);
+        Channel channel = new Channel(userId, channelId, api);
+        channels.put(channelId, channel);
         if (api.getAccessToken() != null && api.getRefreshToken() != null)
             return new ResponseEntity<>(HttpStatus.ACCEPTED);
         return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
     }
 
     @Override
-    public ResponseEntity nextSong(String userId) {
-        if (nextSong(userId, true))
+    public ResponseEntity nextSong(String userId, String channelId) {
+        if (nextSong(userId, channelId, true))
             return new ResponseEntity<>(HttpStatus.ACCEPTED);
         return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
     }
 
     @Override
-    public ResponseEntity previousSong(String userId) {
-        if (previousSong(userId, true))
+    public ResponseEntity previousSong(String userId, String channelId) {
+        if (previousSong(userId, channelId, true))
             return new ResponseEntity<>(HttpStatus.ACCEPTED);
         return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
     }
 
     @Override
-    public ResponseEntity pauseSong(String userId) {
-        if (pauseSong(userId, true))
+    public ResponseEntity pauseSong(String userId, String channelId) {
+        if (pauseSong(userId, channelId, true))
             return new ResponseEntity<>(HttpStatus.ACCEPTED);
         return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
     }
 
     @Override
-    public ResponseEntity resumeSong(String userId) {
-        if (resumeSong(userId, true))
+    public ResponseEntity resumeSong(String userId, String channelId) {
+        if (resumeSong(userId, channelId, true))
             return new ResponseEntity<>(HttpStatus.ACCEPTED);
         return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
     }
 
     @Override
-    public Song getCurrentSong(String userId) {
-        CurrentlyPlayingContext context = getSongContext(userId, true);
+    public Song getCurrentSong(String userId, String channelId) {
+        CurrentlyPlayingContext context = getSongContext(userId, channelId, true);
         if (context == null)
             return new Song("", "");
         Track track = context.getItem();
@@ -108,8 +110,8 @@ public class SpotifyController implements ISpotifyController {
     }
 
     @Override
-    public String getDeviceId(String userId) {
-        return getDeviceId(userId, true);
+    public String getDeviceId(String userId, String channelId) {
+        return getDeviceId(userId, channelId, true);
     }
 
     @Override
@@ -130,8 +132,8 @@ public class SpotifyController implements ISpotifyController {
     }
 
     @Override
-    public int getRemainingMS(@RequestParam String userId) {
-        CurrentlyPlayingContext context = getSongContext(userId, true);
+    public int getRemainingMS(@RequestParam String userId, String channelId) {
+        CurrentlyPlayingContext context = getSongContext(userId, channelId, true);
         if (context == null || !context.getIs_playing())
             return 20000;
         Track track = context.getItem();
@@ -140,21 +142,21 @@ public class SpotifyController implements ISpotifyController {
         return duration - progress + UPDATE_DELAY;
     }
 
-    private boolean nextSong(String userId, boolean retry) {
+    private boolean nextSong(String userId, String channelId, boolean retry) {
 
-        if (!spotifyAccounts.containsKey(userId))
+        if (!channels.containsKey(channelId))
             return false;
 
-        SkipUsersPlaybackToNextTrackRequest skipUsersPlaybackToNextTrackRequest = spotifyAccounts.get(userId)
+        SkipUsersPlaybackToNextTrackRequest skipUsersPlaybackToNextTrackRequest = channels.get(channelId).getApi()
                 .skipUsersPlaybackToNextTrack()
-                .device_id(getDeviceId(userId))
+                .device_id(getDeviceId(userId, channelId))
                 .build();
 
         try {
             skipUsersPlaybackToNextTrackRequest.execute();
         } catch (UnauthorizedException e) {
-            updateTokens(userId);
-            return nextSong(userId, false);
+            updateTokens(userId, channelId);
+            return nextSong(userId, channelId, false);
         } catch (IOException | SpotifyWebApiException e) {
             e.printStackTrace();
             return false;
@@ -166,21 +168,21 @@ public class SpotifyController implements ISpotifyController {
 
     }
 
-    private boolean previousSong(String userId, boolean retry) {
+    private boolean previousSong(String userId, String channelId, boolean retry) {
 
-        if (!spotifyAccounts.containsKey(userId))
+        if (!channels.containsKey(channelId))
             return false;
 
-        SkipUsersPlaybackToPreviousTrackRequest skipUsersPlaybackToPreviousTrackRequest = spotifyAccounts.get(userId)
+        SkipUsersPlaybackToPreviousTrackRequest skipUsersPlaybackToPreviousTrackRequest = channels.get(channelId).getApi()
                 .skipUsersPlaybackToPreviousTrack()
-                .device_id(getDeviceId(userId))
+                .device_id(getDeviceId(userId, channelId))
                 .build();
 
         try {
             skipUsersPlaybackToPreviousTrackRequest.execute();
         } catch (UnauthorizedException e) {
-            updateTokens(userId);
-            return previousSong(userId, false);
+            updateTokens(userId, channelId);
+            return previousSong(userId, channelId, false);
         } catch (IOException | SpotifyWebApiException e) {
             e.printStackTrace();
         } catch (IllegalArgumentException e) {
@@ -190,24 +192,24 @@ public class SpotifyController implements ISpotifyController {
         return true;
     }
 
-    private boolean pauseSong(String userId, boolean retry) {
+    private boolean pauseSong(String userId, String channelId, boolean retry) {
 
-        CurrentlyPlayingContext currentContex = getSongContext(userId, true);
-        if (!spotifyAccounts.containsKey(userId)
+        CurrentlyPlayingContext currentContex = getSongContext(userId, channelId, true);
+        if (!channels.containsKey(channelId)
                 || currentContex == null
                 || !currentContex.getIs_playing())
             return false;
 
-        PauseUsersPlaybackRequest pauseUsersPlaybackRequest = spotifyAccounts.get(userId)
+        PauseUsersPlaybackRequest pauseUsersPlaybackRequest = channels.get(channelId).getApi()
                 .pauseUsersPlayback()
-                .device_id(getDeviceId(userId))
+                .device_id(getDeviceId(userId, channelId))
                 .build();
 
         try {
             pauseUsersPlaybackRequest.execute();
         } catch (UnauthorizedException e) {
-            updateTokens(userId);
-            return pauseSong(userId, false);
+            updateTokens(userId, channelId);
+            return pauseSong(userId, channelId, false);
         } catch (IOException | SpotifyWebApiException e) {
             e.printStackTrace();
         } catch (IllegalArgumentException e) {
@@ -218,24 +220,24 @@ public class SpotifyController implements ISpotifyController {
 
     }
 
-    private boolean resumeSong(String userId, boolean retry) {
+    private boolean resumeSong(String userId, String channelId, boolean retry) {
 
-        CurrentlyPlayingContext currentContex = getSongContext(userId, true);
-        if (!spotifyAccounts.containsKey(userId)
+        CurrentlyPlayingContext currentContex = getSongContext(userId, channelId, true);
+        if (!channels.containsKey(channelId)
                 || currentContex == null
                 || currentContex.getIs_playing())
             return false;
 
-        StartResumeUsersPlaybackRequest startResumeUsersPlaybackRequest = spotifyAccounts.get(userId)
+        StartResumeUsersPlaybackRequest startResumeUsersPlaybackRequest = channels.get(channelId).getApi()
                 .startResumeUsersPlayback()
-                .device_id(getDeviceId(userId))
+                .device_id(getDeviceId(userId, channelId))
                 .build();
 
         try {
             startResumeUsersPlaybackRequest.execute();
         } catch (UnauthorizedException e) {
-            updateTokens(userId);
-            return resumeSong(userId, false);
+            updateTokens(userId, channelId);
+            return resumeSong(userId, channelId, false);
         } catch (IOException | SpotifyWebApiException e) {
             e.printStackTrace();
         } catch (IllegalArgumentException e) {
@@ -246,31 +248,31 @@ public class SpotifyController implements ISpotifyController {
 
     }
 
-    private CurrentlyPlayingContext getSongContext(String userId, boolean retry) {
-        if (!spotifyAccounts.containsKey(userId))
+    private CurrentlyPlayingContext getSongContext(String userId, String channelId, boolean retry) {
+        if (!channels.containsKey(channelId))
             return null;
 
-        GetInformationAboutUsersCurrentPlaybackRequest getInformationAboutUsersCurrentPlaybackRequest = spotifyAccounts.get(userId)
+        GetInformationAboutUsersCurrentPlaybackRequest getInformationAboutUsersCurrentPlaybackRequest = channels.get(channelId).getApi()
                 .getInformationAboutUsersCurrentPlayback()
                 .build();
 
         try {
             return getInformationAboutUsersCurrentPlaybackRequest.execute();
         } catch (UnauthorizedException e) {
-            updateTokens(userId);
-            return getSongContext(userId, false);
+            updateTokens(userId, channelId);
+            return getSongContext(userId, channelId, false);
         } catch (IOException | SpotifyWebApiException e) {
             e.printStackTrace();
         }
         return null;
     }
 
-    private String getDeviceId(String userId, boolean retry) {
+    private String getDeviceId(String userId, String channelId, boolean retry) {
 
-        if (!spotifyAccounts.containsKey(userId))
+        if (!channels.containsKey(channelId))
             return "";
 
-        GetUsersAvailableDevicesRequest getUsersAvailableDevicesRequest = spotifyAccounts.get(userId)
+        GetUsersAvailableDevicesRequest getUsersAvailableDevicesRequest = channels.get(channelId).getApi()
                 .getUsersAvailableDevices()
                 .build();
         try {
@@ -279,8 +281,8 @@ public class SpotifyController implements ISpotifyController {
                 if (device.getIs_active())
                     return device.getId();
         } catch (UnauthorizedException e) {
-            updateTokens(userId);
-            return getDeviceId(userId, false);
+            updateTokens(userId, channelId);
+            return getDeviceId(userId, channelId, false);
         } catch (IOException | SpotifyWebApiException e) {
             e.printStackTrace();
         }
@@ -314,11 +316,12 @@ public class SpotifyController implements ISpotifyController {
         return api;
     }
 
-    private boolean updateTokens(String userId) {
-        if (!spotifyAccounts.containsKey(userId))
+    private boolean updateTokens(String userId, String channelId) {
+        if (!channels.containsKey(channelId)
+                || !channels.get(channelId).getOwner().equals(userId))
             return false;
 
-        SpotifyApi api = spotifyAccounts.get(userId);
+        SpotifyApi api = channels.get(channelId).getApi();
         AuthorizationCodeRefreshRequest authorizationCodeRefreshRequest = api
                 .authorizationCodeRefresh()
                 .build();
@@ -326,7 +329,7 @@ public class SpotifyController implements ISpotifyController {
             AuthorizationCodeCredentials authorizationCodeCredentials = authorizationCodeRefreshRequest.execute();
             api.setAccessToken(authorizationCodeCredentials.getAccessToken());
             api.setRefreshToken(authorizationCodeCredentials.getRefreshToken());
-            spotifyAccounts.put(userId, api);
+            channels.get(channelId).setApi(api);
             return api.getAccessToken() != null && api.getRefreshToken() != null;
         } catch (IOException | SpotifyWebApiException e) {
             e.printStackTrace();
