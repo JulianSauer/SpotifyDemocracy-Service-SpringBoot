@@ -8,7 +8,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 import static org.springframework.web.bind.annotation.RequestMethod.GET;
 
-public interface ISpotifyController {
+public interface ISpotifyRestController {
+
+    @RequestMapping(value = "/join", method = GET)
+    ResponseEntity addUser(String userId, String channelId);
 
     @RequestMapping(value = "/add", method = GET)
     ResponseEntity addUser(String code, String userId, String channelId);

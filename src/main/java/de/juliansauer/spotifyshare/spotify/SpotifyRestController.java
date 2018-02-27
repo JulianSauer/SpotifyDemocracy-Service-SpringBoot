@@ -15,8 +15,10 @@ import com.wrapper.spotify.requests.authorization.authorization_code.Authorizati
 import com.wrapper.spotify.requests.data.player.*;
 import de.juliansauer.spotifyshare.rest.AuthorizationCode;
 import de.juliansauer.spotifyshare.rest.Song;
+import de.juliansauer.spotifyshare.rest.User;
 import de.juliansauer.spotifyshare.storage.ConfigManager;
 import de.juliansauer.spotifyshare.voting.Channel;
+import de.juliansauer.spotifyshare.voting.IChannelRestController;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -26,26 +28,38 @@ import org.springframework.web.bind.annotation.RestController;
 import java.io.IOException;
 import java.net.URI;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 @RestController
 @CrossOrigin
-public class SpotifyController implements ISpotifyController {
+public class SpotifyRestController implements ISpotifyRestController, IChannelRestController {
 
     private final String scope = "user-read-playback-state," +
             "user-modify-playback-state";
 
     private final int UPDATE_DELAY = 2000;
-    
+
     private Map<String, Channel> channels;
 
     private final URI redirectUri = SpotifyHttpManager.makeUri("http://localhost:4200/create");
 
     ConfigManager config;
 
-    public SpotifyController() {
+    public SpotifyRestController() {
         channels = new HashMap<>();
         config = new ConfigManager();
+    }
+
+    @Override
+    public ResponseEntity addUser(String userId, String channelId) {
+        if (!channels.containsKey(channelId))
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        Channel channel = channels.get(channelId);
+        if (channel.addUser(userId))
+            return new ResponseEntity<>(HttpStatus.ACCEPTED);
+        return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
     }
 
     @Override
@@ -140,6 +154,27 @@ public class SpotifyController implements ISpotifyController {
         int progress = context.getProgress_ms();
         int duration = track.getDurationMs();
         return duration - progress + UPDATE_DELAY;
+    }
+
+    @Override
+    public Set<User> getUsers(String channelId) {
+        if (!channels.containsKey(channelId))
+            return new HashSet<>();
+        Channel channel = channels.get(channelId);
+        Set<User> users = new HashSet<>();
+        channel.getUsers().forEach(user -> users.add(new User(user)));
+        return users;
+    }
+
+    @Override
+    public ResponseEntity logout(String userId, String channelId) {
+        if (!channels.containsKey(channelId))
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        Channel channel = channels.get(channelId);
+        if (!channel.containsUser(userId))
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        channel.removeUser(userId);
+        return new ResponseEntity<>(HttpStatus.ACCEPTED);
     }
 
     private boolean nextSong(String userId, String channelId, boolean retry) {
@@ -294,7 +329,7 @@ public class SpotifyController implements ISpotifyController {
     /**
      * Creates access and refresh tokens using code retrieved from callback.
      *
-     * @param callbackCode Callback from {@link SpotifyController#getAuthorizationCodeUri()}
+     * @param callbackCode Callback from {@link SpotifyRestController#getAuthorizationCodeUri()}
      * @return Api object containing tokens
      */
     private SpotifyApi getAuthorizationCodeCredentials(String callbackCode) {

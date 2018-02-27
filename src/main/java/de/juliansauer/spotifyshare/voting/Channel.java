@@ -42,6 +42,10 @@ public class Channel {
         return users;
     }
 
+    public boolean containsUser(String user) {
+        return users.contains(user);
+    }
+
     public String getOwner() {
         return owner;
     }
